@@ -5,6 +5,101 @@ Repository for the control software of the waveboard
 add 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/user/Waveboard/lib' to your '.bashrc' file
 
 
+## Acquisizione senza controller
+
+Entrare in SSH nella scheda e eseguire i sefuenti comandi: 
+
+Imposta la data (nell'esempio 7 aprile 2025 ore 15:01)
+``` bash
+date 0407150125
+```
+
+Imposta il gain alto (20x). Usare il comando "\$gsla#" per il gain basso (2x)
+``` bash
+./M4Comm -s "\$gsha#" &
+```
+
+Importa i registri del tempo (roba necessaria per far funzionare la scheda)
+``` bash
+./SetTimeReg -t l
+```
+
+Imposta gli IOB delay (altra roba che serve a far funzionare la scheda correttamente)
+``` bash
+bash daq_set_iob_delay.sh -N "{0..11}" -F "25 25 20 20 18 18 18 18 25 25 20 20"
+```
+
+Imposta i piedistalli (esempio con i valori della WB 1n):
+```bash 
+bash daq_set_pedestal.sh -N "0 1 2 3 4 5 6 7 8 9 10 11" -P " 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0 0x03DC0"
+```
+Questi sono valori alti (usati per i segnali negativi). Se volete acquisire segnali positivi servono valori di piedistallo bassi "350 330 325 338 345 322 0x0180 0x00145 0x00145 0x00145 0x00145 0x00145" questi per esempio sono quelli per la WB 4
+
+
+Infine potete settare i parametri di acquisizione:
+``` bash
+bash daq_run_launch.sh -j -N "0 1 2 3 4 5 6 7 8 9 10 11" -S "start_th" -P "stop_th" -L "lead" -T "tail"
+```
+**Lead**: campioni da acquisire prima del trigger. Esempio "8 8 8 8 8 8 8 8 8 8 8 8" acquisisce 8 campioni prima del trigger
+**Tail**: campioni da acquisire dopo il trigger. Esempio "8 8 8 8 8 8 8 8 8 8 8 8" acquisisce 8 campioni dopo il trigger
+
+**Start_th e Stop_th**: soglia di start e stop. di sotto avete uno scriptino python per ottenere le soglie in esadecimale partendo da quelle in mV (per polarità NEGATIVA, con board 1):
+**NB**: Controllare che i valori di calizbrazione siano quelli giusti!!!
+``` python
+v_to_adc_all = {
+  "1n":{0: [14478.60239767,   105.72266231],
+     10: [14581.95209726,    94.49772418],
+     11: [14585.64212614,    71.52928685],
+     2: [14550.19800913,    99.07229959],
+     3: [14705.41800247,   120.3148473],
+     4: [14543.1833827,   140.8470843],
+     5: [14575.71114986,    83.09878558],
+     6: [14502.89628843,   125.51115324],
+     7: [14756.93105566,   122.49110006],
+     8: [14692.74249293,    64.11840958],
+     9: [14916.64285453,  -109.3580361],
+     1: [14550.19800913,    99.07229959]}}
+
+wvb_active="1n"
+ch=1
+
+def convert_v_to_adc(element,ch):
+    return (v_to_adc_all[wvb_active][ch][1]+element*v_to_adc_all[wvb_active][ch][0])
+
+stop_th= str(int(0x3fff) - int(convert_v_to_adc(float(stop_th_mv[ch])*0.001,ch)))
+print(stop_th)
+```
+
+Per l'HV usare il comando ```./SetHv``` e seguire le istruzioni per ogni canale. 
+
+
+Per far partire una acquisizione, aprire un nuovo terminale e entrare in SSH nella scheda. Eseguire il comando:
+```
+./DaqReadTcp
+```
+
+Su un altro terminale del computer host (quindi NON in SSH) eseguire questo comando per stabilire la connessione:
+per salvare su file le forme d'onda:
+```
+nc 192.168.137.30 5000 > file.bin
+```
+per vedere la rate su schermo (sostituire a ```delay``` e ```interval``` i valori desiderati):
+```
+nc 192.168.137.30 5000 | ./RateParser_x86 -a -t "interval" -d "delay" -c 13
+```
+Infine tornare su un secondo terminale in SSH nella scheda (non lo stesso dove si era lanciato DaqReadTcp) e lanciare il seuente comando per far partire l'acquiszione:
+
+``` bash
+bash daq_run_launch.sh -N "0 1 2 3 4 5 6 7 8 9 10 11" -S "start_th" -P "stop_th" -L "lead" -T "tail"
+```
+Il comando è lo stesso usato per settare i parametri, ma senza il  ```-j``` che inibisce lo start della presa dati. 
+
+Per far smettere la presa dati lanciare:
+``` bash
+bash daq_run_stop.sh -N "0 1 2 3 4 5 6 7 8 9 10 11"
+```
+
+
 # Ilarizzazione waveboard
 *11 Ottobre 2024*
 
